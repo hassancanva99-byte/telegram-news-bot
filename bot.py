@@ -10,9 +10,10 @@ CHANNEL = "@rasd_alfaar"
 
 bot = Bot(token=TOKEN)
 
-# 120 حساب تويتر عربي عبر Nitter RSS (أمثلة)
+# ------------------------------
+# 120 حساب عربي للحروب عبر Nitter RSS
+# ------------------------------
 twitter_rss = [
-# الأخبار العاجلة الكبرى
 "https://nitter.net/AJABreaking/rss",
 "https://nitter.net/AlHadath/rss",
 "https://nitter.net/AlArabiya_Brk/rss",
@@ -23,8 +24,6 @@ twitter_rss = [
 "https://nitter.net/AlghadeerTV/rss",
 "https://nitter.net/France24_ar/rss",
 "https://nitter.net/Alhurra/rss",
-
-# الحسابات العسكرية والمقاومة
 "https://nitter.net/AlManarNews/rss",
 "https://nitter.net/AlAhedNews/rss",
 "https://nitter.net/PalinfoAr/rss",
@@ -35,8 +34,6 @@ twitter_rss = [
 "https://nitter.net/AlJazeeraRSS/rss",
 "https://nitter.net/SyrianObservatory/rss",
 "https://nitter.net/AlNabaaNews/rss",
-
-# وكالات الأخبار الكبرى بالعربي
 "https://nitter.net/AFP_arabic/rss",
 "https://nitter.net/ReutersArab/rss",
 "https://nitter.net/Euronews_ar/rss",
@@ -47,8 +44,6 @@ twitter_rss = [
 "https://nitter.net/AlMasdarNews/rss",
 "https://nitter.net/AlMonitorRSS/rss",
 "https://nitter.net/AlArabiyaNews/rss",
-
-# الأخبار الفلسطينية والعربية
 "https://nitter.net/ShehabNews/rss",
 "https://nitter.net/MaanNewsAgency/rss",
 "https://nitter.net/PalestineInfo/rss",
@@ -58,9 +53,6 @@ twitter_rss = [
 "https://nitter.net/GazaLiveNews/rss",
 "https://nitter.net/QassamNews/rss",
 "https://nitter.net/AlQudsNews/rss",
-"https://nitter.net/PalTodayRSS/rss",
-
-# الشرق الأوسط والشرق الأوسط الحروب
 "https://nitter.net/SyrianArabNews/rss",
 "https://nitter.net/IraqNewsAgency/rss",
 "https://nitter.net/BaghdadToday/rss",
@@ -71,8 +63,6 @@ twitter_rss = [
 "https://nitter.net/KurdistanNews/rss",
 "https://nitter.net/AlAnbaaRSS/rss",
 "https://nitter.net/AlDiyarNews/rss",
-
-# باقي الحسابات: أخبار الحروب، الدفاع، الصواريخ
 "https://nitter.net/ArmyNewsAr/rss",
 "https://nitter.net/MilitaryWatchAr/rss",
 "https://nitter.net/DefenseNewsAr/rss",
@@ -83,8 +73,6 @@ twitter_rss = [
 "https://nitter.net/MilitaryReportsAr/rss",
 "https://nitter.net/TacticalNewsAr/rss",
 "https://nitter.net/DefenseUpdatesAr/rss",
-
-# تكملة لتصل 120 حساب
 "https://nitter.net/StrategicNewsAr/rss",
 "https://nitter.net/GlobalMilitaryAr/rss",
 "https://nitter.net/WarAlertsAr/rss",
@@ -92,21 +80,6 @@ twitter_rss = [
 "https://nitter.net/HotMilitaryAr/rss",
 "https://nitter.net/MiddleEastConflictAr/rss",
 "https://nitter.net/NewsWarAr/rss",
-"https://nitter.net/CombatUpdatesAr/rss",
-"https://nitter.net/BattlefieldAr/rss",
-"https://nitter.net/FrontlineNewsAr/rss",
-"https://nitter.net/OperationalNewsAr/rss",
-"https://nitter.net/ArmedForcesAr/rss",
-"https://nitter.net/DefenseAnalysisAr/rss",
-"https://nitter.net/WarMonitorAr/rss",
-"https://nitter.net/MilitaryIntelAr/rss",
-"https://nitter.net/StrategicIntelAr/rss",
-"https://nitter.net/ConflictIntelAr/rss",
-"https://nitter.net/GlobalConflictAr/rss",
-"https://nitter.net/AlertNewsAr/rss",
-"https://nitter.net/BreakingMilitaryAr/rss",
-"https://nitter.net/HotNewsAr/rss",
-"https://nitter.net/WarUpdatesAr/rss",
 "https://nitter.net/CombatAlertsAr/rss",
 "https://nitter.net/MilitaryNewsAr/rss",
 "https://nitter.net/FrontlineUpdatesAr/rss",
@@ -178,6 +151,22 @@ keywords = [
 
 posted = set()
 
+# ------------------------------
+# دالة آمنة لجلب RSS
+# ------------------------------
+def safe_parse(url):
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        feed = feedparser.parse(resp.content)
+        return feed
+    except Exception as e:
+        print(f"RSS fetch error: {url} -> {e}")
+        return None
+
+# ------------------------------
+# جلب التغريدة كاملة + الصور + الفيديو
+# ------------------------------
 async def get_full_tweet(link):
     try:
         html = requests.get(link, timeout=10).text
@@ -199,55 +188,63 @@ async def get_full_tweet(link):
                 videos.append("https://nitter.net" + src)
 
         return text, images, videos
-
-    except:
+    except Exception as e:
+        print("get_full_tweet error:", e)
         return "", [], []
 
+# ------------------------------
+# فحص جميع الحسابات
+# ------------------------------
 async def check_twitter():
     for url in twitter_rss:
-        feed = feedparser.parse(url)
+        feed = safe_parse(url)
+        if not feed:
+            continue
 
         for entry in feed.entries:
             if entry.link in posted:
                 continue
 
             text, images, videos = await get_full_tweet(entry.link)
-
             if not text:
                 continue
-
             if not any(word in text for word in keywords):
                 continue
 
             try:
                 if images:
-                    img = requests.get(images[0])
+                    img = requests.get(images[0], timeout=10)
                     await bot.send_photo(
                         chat_id=CHANNEL,
                         photo=BytesIO(img.content),
                         caption=text[:1000]
                     )
-
                 elif videos:
-                    vid = requests.get(videos[0])
+                    vid = requests.get(videos[0], timeout=10)
                     await bot.send_video(
                         chat_id=CHANNEL,
                         video=BytesIO(vid.content),
                         caption=text[:1000]
                     )
-
                 else:
                     await bot.send_message(chat_id=CHANNEL, text=text)
-
             except Exception as e:
-                print("send error", e)
+                print("send error:", e)
 
             posted.add(entry.link)
-            break
+            await asyncio.sleep(0.5)  # لتقليل الضغط على التليجرام
 
+        await asyncio.sleep(1)  # لتقليل الضغط على Nitter
+
+# ------------------------------
+# التشغيل الرئيسي
+# ------------------------------
 async def main():
     while True:
-        await check_twitter()
+        try:
+            await check_twitter()
+        except Exception as e:
+            print("check_twitter error:", e)
         await asyncio.sleep(5)  # تحديث كل 5 ثواني
 
 asyncio.run(main())
