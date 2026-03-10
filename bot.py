@@ -14,7 +14,7 @@ bot = Bot(token=TOKEN)
 # -----------------------------
 # إعداد Twitter API v2
 # -----------------------------
-BEARER_TOKEN = "AAAAAAAAAAAAAAAAAAAAACql8AEAAAAArMv51otgm4gB25IERthoonMa12w%3Dh2RapOkbemMMtp6ZX6AosINfNHsM4IE2LyJiRZtAD5XBUshFpm"
+BEARER_TOKEN = "AAAAAAAAAAAAAAAAAAAAADmm8AEAAAAAsexEcFj5BFQvItxswesukqu8PNU%3DbmAhKIduXdwzycLDtPbLEJ8TFo012rfLX5lpFccJUtJ4Oz93oM"
 client = tweepy.Client(bearer_token=BEARER_TOKEN, wait_on_rate_limit=True)
 
 # -----------------------------
@@ -124,3 +124,4 @@ async def main():
         await asyncio.sleep(10)  # تحديث كل 10 ثواني
 
 asyncio.run(main())
+
