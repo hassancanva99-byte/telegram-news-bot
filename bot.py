@@ -1,7 +1,7 @@
-import feedparser
 import asyncio
+import feedparser
 import requests
-import yt_dlp
+import snscrape.modules.twitter as sntwitter
 from io import BytesIO
 from telegram import Bot
 
@@ -10,89 +10,78 @@ CHANNEL = "@rasd_alfaar"
 
 bot = Bot(token=TOKEN)
 
-feeds = [
+# حسابات تويتر عربية
+twitter_accounts = [
+"AJABreaking",
+"AlHadath",
+"AlArabiya_Brk",
+"SkyNewsArabia_B",
+"AlMayadeenNews",
+"RTarabic",
+"trtarabi",
+"France24_ar",
+"Alhurra"
+]
 
-# تويتر عربي
-"https://rsshub.app/twitter/user/AlHadath",
-"https://rsshub.app/twitter/user/AlArabiya_Brk",
-"https://rsshub.app/twitter/user/AJABreaking",
-"https://rsshub.app/twitter/user/AlMayadeenNews",
-"https://rsshub.app/twitter/user/SkyNewsArabia_B",
+# كلمات الحرب
+keywords = [
+"إيران",
+"اسرائيل",
+"إسرائيل",
+"قصف",
+"صاروخ",
+"مسيرة",
+"حرب",
+"هجوم",
+"الدفاع الجوي"
+]
 
-# مواقع عربية
+# RSS المواقع العربية
+rss_feeds = [
+
 "https://www.aljazeera.net/aljazeera/rss",
 "https://www.alarabiya.net/.mrss/ar.xml",
 "https://www.skynewsarabia.com/web/rss",
 "https://arabic.rt.com/rss/",
 "https://www.alhurra.com/api/zmg/rss"
+
 ]
 
-posted = set()
+posted_tweets = set()
+posted_news = set()
 
 
-def download_video(url):
+# ---------------------------
+# فحص تويتر
+# ---------------------------
 
-    ydl_opts = {
-        "format": "mp4",
-        "quiet": True
-    }
+async def check_twitter():
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    for account in twitter_accounts:
 
-        video_url = info["url"]
+        try:
 
-        r = requests.get(video_url)
+            for tweet in sntwitter.TwitterUserScraper(account).get_items():
 
-        return BytesIO(r.content)
+                if tweet.id in posted_tweets:
+                    break
 
+                text = tweet.content
 
-def get_image(entry):
+                if not any(word in text for word in keywords):
+                    continue
 
-    if "media_content" in entry:
-        return entry.media_content[0]["url"]
+                message = f"{text}\n\n{tweet.url}"
 
-    if "enclosures" in entry and len(entry.enclosures) > 0:
-        return entry.enclosures[0]["href"]
+                try:
 
-    return None
+                    if tweet.media:
 
+                        media = tweet.media[0]
 
-async def main():
+                        if hasattr(media, "fullUrl"):
 
-    while True:
-
-        for url in feeds:
-
-            feed = feedparser.parse(url)
-
-            for entry in feed.entries:
-
-                if entry.link not in posted:
-
-                    title = entry.title
-                    text = entry.summary if "summary" in entry else ""
-
-                    message = f"{title}\n\n{text}\n\n{entry.link}"
-
-                    media = get_image(entry)
-
-                    try:
-
-                        # فيديو تويتر
-                        if "twitter.com" in entry.link or "x.com" in entry.link:
-
-                            video = download_video(entry.link)
-
-                            await bot.send_video(
-                                chat_id=CHANNEL,
-                                video=video,
-                                caption=message[:1000]
-                            )
-
-                        elif media:
-
-                            img = requests.get(media)
+                            img = requests.get(media.fullUrl)
 
                             await bot.send_photo(
                                 chat_id=CHANNEL,
@@ -100,19 +89,87 @@ async def main():
                                 caption=message[:1000]
                             )
 
-                        else:
+                    else:
 
-                            await bot.send_message(
-                                chat_id=CHANNEL,
-                                text=message[:4000]
-                            )
+                        await bot.send_message(
+                            chat_id=CHANNEL,
+                            text=message[:4000]
+                        )
 
-                    except Exception as e:
-                        print(e)
+                except Exception as e:
+                    print("Twitter send error:", e)
 
-                    posted.add(entry.link)
+                posted_tweets.add(tweet.id)
 
-        await asyncio.sleep(15)
+                break
+
+        except Exception as e:
+            print("Twitter scrape error:", e)
+
+
+# ---------------------------
+# فحص RSS المواقع
+# ---------------------------
+
+async def check_rss():
+
+    for url in rss_feeds:
+
+        try:
+
+            feed = feedparser.parse(url)
+
+            for entry in feed.entries:
+
+                if entry.link in posted_news:
+                    continue
+
+                title = entry.title
+                summary = entry.summary if "summary" in entry else ""
+
+                text = f"{title}\n\n{summary}\n\n{entry.link}"
+
+                try:
+
+                    if "media_content" in entry:
+
+                        img = requests.get(entry.media_content[0]["url"])
+
+                        await bot.send_photo(
+                            chat_id=CHANNEL,
+                            photo=BytesIO(img.content),
+                            caption=text[:1000]
+                        )
+
+                    else:
+
+                        await bot.send_message(
+                            chat_id=CHANNEL,
+                            text=text[:4000]
+                        )
+
+                except Exception as e:
+                    print("RSS send error:", e)
+
+                posted_news.add(entry.link)
+
+        except Exception as e:
+            print("RSS error:", e)
+
+
+# ---------------------------
+# التشغيل الرئيسي
+# ---------------------------
+
+async def main():
+
+    while True:
+
+        await check_twitter()
+
+        await check_rss()
+
+        await asyncio.sleep(20)
 
 
 asyncio.run(main())
