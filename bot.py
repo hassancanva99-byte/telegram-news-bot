@@ -123,4 +123,4 @@ async def main():
             print(f"main loop error: {e}")
         await asyncio.sleep(10)  # تحديث كل 10 ثواني
 
-asyncio.run(m
+asyncio.run(main())
