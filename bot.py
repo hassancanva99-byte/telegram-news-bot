@@ -1,127 +1,124 @@
 import asyncio
-import feedparser
-import requests
-from bs4 import BeautifulSoup
 from io import BytesIO
+import requests
+import tweepy
 from telegram import Bot
 
+# -----------------------------
+# إعداد التليجرام
+# -----------------------------
 TOKEN = "8790168869:AAE_FDokDqPB79HAQMlKCkbcPnj6KShBEnQ"
 CHANNEL = "@rasd_alfaar"
-
 bot = Bot(token=TOKEN)
 
-# 10 حسابات للتجربة (يمكن توسيعها لاحقًا)
-twitter_accounts = [
-    "AJABreaking", "AlHadath", "AlArabiya_Brk", "SkyNewsArabia_B", "AlMayadeenNews"
-]
+# -----------------------------
+# إعداد Twitter API v2
+# -----------------------------
+BEARER_TOKEN = "AAAAAAAAAAAAAAAAAAAAACql8AEAAAAA5LWVg3W2GIdGVYFKjESE44%2FKERI%3DM16DVAKlOLUI0DMaRjIauI27GxxWhCpzPmnYwyqUZxGD48I7nm"
+client = tweepy.Client(bearer_token=BEARER_TOKEN, wait_on_rate_limit=True)
 
-# قائمة سيرفرات Nitter بديلة
-nitter_servers = [
-    "https://nitter.net",
-    "https://nitter.42l.fr",
-    "https://nitter.it"
+# -----------------------------
+# قائمة 120 حساب عربي معروف بالأخبار العسكرية والحروب
+# -----------------------------
+twitter_accounts = [
+    "AJABreaking", "AlHadath", "AlArabiya_Brk", "SkyNewsArabia_B", "AlMayadeenNews",
+    "AlMasdarNews", "AlArabiya", "AlHadathNews", "AlmanarNews", "AlJazeeraArabic",
+    "AlBaghdadiaNews", "RTArabic", "SputnikArabia", "PressTVArabic", "AlArabiyaLive",
+    # أكمل باقي الحسابات حتى 120...
 ]
 
 posted = set()
 
-# ------------------------------
-# دالة لجلب RSS مع سيرفر بديل
-# ------------------------------
-def safe_parse(account):
-    for server in nitter_servers:
-        url = f"{server}/{account}/rss"
-        try:
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()
-            feed = feedparser.parse(resp.content)
-            return feed
-        except Exception as e:
-            print(f"RSS fetch failed for {account} at {server}: {e}")
-    return None
-
-# ------------------------------
-# جلب التغريدة كاملة + الصور + الفيديو
-# ------------------------------
-async def get_full_tweet(link):
+# -----------------------------
+# جلب التغريدات من الحساب
+# -----------------------------
+async def fetch_tweets(username):
     try:
-        html = requests.get(link, timeout=10).text
-        soup = BeautifulSoup(html, "html.parser")
+        user = client.get_user(username=username)
+        tweets = client.get_users_tweets(
+            id=user.data.id,
+            tweet_fields=["attachments","created_at","entities","text"],
+            expansions=["attachments.media_keys"],
+            media_fields=["url","preview_image_url"]
+        )
 
-        tweet_text = soup.find("div", {"class": "tweet-content"})
-        text = tweet_text.text.strip() if tweet_text else ""
+        if not tweets.data:
+            return []
 
-        images = []
-        for img in soup.find_all("img"):
-            src = img.get("src")
-            if "/pic/" in src:
-                images.append("https://nitter.net" + src)
+        results = []
+        media_map = {}
+        if tweets.includes and "media" in tweets.includes:
+            for m in tweets.includes["media"]:
+                media_map[m.media_key] = m
 
-        videos = []
-        for video in soup.find_all("video"):
-            src = video.get("src")
-            if src:
-                videos.append("https://nitter.net" + src)
-
-        return text, images, videos
-    except Exception as e:
-        print("get_full_tweet error:", e)
-        return "", [], []
-
-# ------------------------------
-# فحص جميع الحسابات
-# ------------------------------
-async def check_twitter():
-    for account in twitter_accounts:
-        feed = safe_parse(account)
-        if not feed:
-            continue
-
-        for entry in feed.entries:
-            if entry.link in posted:
+        for tweet in tweets.data:
+            if tweet.id in posted:
                 continue
+            text = tweet.text
+            images = []
+            videos = []
 
-            text, images, videos = await get_full_tweet(entry.link)
+            if "attachments" in tweet.data:
+                for key in tweet.data["attachments"]["media_keys"]:
+                    media = media_map.get(key)
+                    if not media:
+                        continue
+                    if media.type == "photo":
+                        images.append(media.url)
+                    elif media.type in ["video","animated_gif"]:
+                        videos.append(media.preview_image_url or media.url)
 
-            # طباعة التحذيرات لمراقبة التغريدة
-            if not text:
-                print(f"No text found for {entry.link}")
-            if not images and not videos:
-                print(f"No images/videos for {entry.link}")
+            results.append((tweet.id, text, images, videos))
+        return results
+    except Exception as e:
+        print(f"fetch_tweets error for {username}: {e}")
+        return []
 
-            try:
-                if images:
-                    img = requests.get(images[0], timeout=10)
-                    await bot.send_photo(
-                        chat_id=CHANNEL,
-                        photo=BytesIO(img.content),
-                        caption=text[:1000]
-                    )
-                elif videos:
-                    vid = requests.get(videos[0], timeout=10)
-                    await bot.send_video(
-                        chat_id=CHANNEL,
-                        video=BytesIO(vid.content),
-                        caption=text[:1000]
-                    )
-                else:
-                    await bot.send_message(chat_id=CHANNEL, text=text)
-            except Exception as e:
-                print("send error:", e)
+# -----------------------------
+# إرسال الرسائل للتليجرام
+# -----------------------------
+async def send_to_telegram(tweet_id, text, images, videos):
+    try:
+        if images:
+            img = requests.get(images[0], timeout=10)
+            await bot.send_photo(
+                chat_id=CHANNEL,
+                photo=BytesIO(img.content),
+                caption=text[:1000]
+            )
+        elif videos:
+            vid = requests.get(videos[0], timeout=10)
+            await bot.send_video(
+                chat_id=CHANNEL,
+                video=BytesIO(vid.content),
+                caption=text[:1000]
+            )
+        else:
+            await bot.send_message(chat_id=CHANNEL, text=text)
+    except Exception as e:
+        print(f"send_to_telegram error: {e}")
+    posted.add(tweet_id)
 
-            posted.add(entry.link)
+# -----------------------------
+# فحص كل الحسابات
+# -----------------------------
+async def check_accounts():
+    for username in twitter_accounts:
+        tweets = await fetch_tweets(username)
+        for tweet_id, text, images, videos in tweets:
+            await send_to_telegram(tweet_id, text, images, videos)
             await asyncio.sleep(0.5)
-
         await asyncio.sleep(1)
 
-# ------------------------------
+# -----------------------------
 # التشغيل الرئيسي
-# ------------------------------
+# -----------------------------
 async def main():
     while True:
         try:
-            await check_twitter()
+            await check_accounts()
         except Exception as e:
-            print("check_twitter error:", e)
-        await asyncio.sleep(5)
+            print(f"main loop error: {e}")
+        await asyncio.sleep(10)  # تحديث كل 10 ثواني
 
 asyncio.run(main())
