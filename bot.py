@@ -14,19 +14,20 @@ bot = Bot(token=TOKEN)
 # -----------------------------
 # إعداد Twitter API v2
 # -----------------------------
-BEARER_TOKEN = "AAAAAAAAAAAAAAAAAAAAACql8AEAAAAA5LWVg3W2GIdGVYFKjESE44%2FKERI%3DM16DVAKlOLUI0DMaRjIauI27GxxWhCpzPmnYwyqUZxGD48I7nm"
+BEARER_TOKEN = "AAAAAAAAAAAAAAAAAAAAACql8AEAAAAArMv51otgm4gB25IERthoonMa12w%3Dh2RapOkbemMMtp6ZX6AosINfNHsM4IE2LyJiRZtAD5XBUshFpm"
 client = tweepy.Client(bearer_token=BEARER_TOKEN, wait_on_rate_limit=True)
 
 # -----------------------------
-# قائمة 120 حساب عربي معروف بالأخبار العسكرية والحروب
+# قائمة 120 حساب عربي نشط بالأخبار العسكرية والحروب
 # -----------------------------
 twitter_accounts = [
     "AJABreaking", "AlHadath", "AlArabiya_Brk", "SkyNewsArabia_B", "AlMayadeenNews",
     "AlMasdarNews", "AlArabiya", "AlHadathNews", "AlmanarNews", "AlJazeeraArabic",
     "AlBaghdadiaNews", "RTArabic", "SputnikArabia", "PressTVArabic", "AlArabiyaLive",
-    # أكمل باقي الحسابات حتى 120...
+    # إضافة باقي الحسابات حتى 120...
 ]
 
+# قائمة لتجنب نشر نفس التغريدة أكثر من مرة
 posted = set()
 
 # -----------------------------
@@ -37,6 +38,7 @@ async def fetch_tweets(username):
         user = client.get_user(username=username)
         tweets = client.get_users_tweets(
             id=user.data.id,
+            max_results=10,
             tweet_fields=["attachments","created_at","entities","text"],
             expansions=["attachments.media_keys"],
             media_fields=["url","preview_image_url"]
@@ -121,4 +123,4 @@ async def main():
             print(f"main loop error: {e}")
         await asyncio.sleep(10)  # تحديث كل 10 ثواني
 
-asyncio.run(main())
+asyncio.run(m
