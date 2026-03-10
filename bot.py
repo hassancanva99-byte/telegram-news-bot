@@ -1,75 +1,74 @@
 import feedparser
-import telegram
-import time
+import asyncio
 import requests
 from io import BytesIO
+from telegram import Bot
 
-# --- إعدادات البوت ---
 TOKEN = "8790168869:AAE_FDokDqPB79HAQMlKCkbcPnj6KShBEnQ"
 CHANNEL = "@rasd_alfaar"
 
-bot = telegram.Bot(token=TOKEN)
+bot = Bot(token=TOKEN)
 
-# --- قائمة RSS جاهزة لجميع الحسابات والمصادر ---
 feeds = [
-    # حسابات تويتر متخصصة بالحرب
     "https://rsshub.app/twitter/user/MiddleEast01",
-    "https://rsshub.app/twitter/user/A_M_R_M1",
-    "https://rsshub.app/twitter/user/followthenews36",
     "https://rsshub.app/twitter/user/IDF",
-    "https://rsshub.app/twitter/user/IsraelWarRoom",
-    "https://rsshub.app/twitter/user/IsraeliPM",
-
-    # مصادر أخبار عالمية
     "http://feeds.bbci.co.uk/news/world/middle_east/rss.xml",
     "http://rss.cnn.com/rss/edition_world.rss",
-    "https://www.aljazeera.com/xml/rss/all.xml",
-    "https://www.reutersagency.com/feed/?best-topics=world-news",
-
-    # تغطية الشرق الأوسط العامة
-    "http://feeds.alarabiya.net/alarabiya/arabic",
-    "https://www.middleeasteye.net/rss"
+    "https://www.aljazeera.com/xml/rss/all.xml"
 ]
 
 posted = set()
 
-# --- وظيفة لجلب الصورة من RSS ---
+
 def get_image(entry):
-    # معظم RSS يحتوي على media_content أو enclosure
     if hasattr(entry, 'media_content'):
         return entry.media_content[0]['url']
     if hasattr(entry, 'enclosures') and len(entry.enclosures) > 0:
         return entry.enclosures[0]['href']
     return None
 
-# --- الحلقة الرئيسية للبوت ---
-while True:
-    for rss_url in feeds:
-        try:
+
+async def main():
+
+    while True:
+
+        for rss_url in feeds:
+
             feed = feedparser.parse(rss_url)
-        except Exception as e:
-            print("Error parsing RSS:", e)
-            continue
 
-        for entry in feed.entries:
-            if entry.link not in posted:
-                msg = f"{entry.title}\n{entry.link}"
+            for entry in feed.entries:
 
-                # جلب الصورة إذا موجودة
-                image_url = get_image(entry)
+                if entry.link not in posted:
 
-                try:
-                    if image_url:
-                        # تحميل الصورة
-                        response = requests.get(image_url)
-                        image_bytes = BytesIO(response.content)
-                        bot.send_photo(chat_id=CHANNEL, photo=image_bytes, caption=msg)
-                    else:
-                        bot.send_message(chat_id=CHANNEL, text=msg)
-                except Exception as e:
-                    print("Error sending message:", e)
+                    text = f"{entry.title}\n{entry.link}"
 
-                posted.add(entry.link)
+                    image_url = get_image(entry)
 
-    # تحديث كل 15 ثانية
-    time.sleep(15)
+                    try:
+
+                        if image_url:
+                            response = requests.get(image_url)
+                            image_bytes = BytesIO(response.content)
+
+                            await bot.send_photo(
+                                chat_id=CHANNEL,
+                                photo=image_bytes,
+                                caption=text
+                            )
+
+                        else:
+
+                            await bot.send_message(
+                                chat_id=CHANNEL,
+                                text=text
+                            )
+
+                    except Exception as e:
+                        print("Send error:", e)
+
+                    posted.add(entry.link)
+
+        await asyncio.sleep(15)
+
+
+asyncio.run(main())
