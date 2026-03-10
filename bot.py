@@ -1,6 +1,7 @@
 import feedparser
 import asyncio
 import requests
+import yt_dlp
 from io import BytesIO
 from telegram import Bot
 
@@ -10,21 +11,50 @@ CHANNEL = "@rasd_alfaar"
 bot = Bot(token=TOKEN)
 
 feeds = [
-    "https://rsshub.app/twitter/user/MiddleEast01",
-    "https://rsshub.app/twitter/user/IDF",
-    "http://feeds.bbci.co.uk/news/world/middle_east/rss.xml",
-    "http://rss.cnn.com/rss/edition_world.rss",
-    "https://www.aljazeera.com/xml/rss/all.xml"
+
+# تويتر عربي
+"https://rsshub.app/twitter/user/AlHadath",
+"https://rsshub.app/twitter/user/AlArabiya_Brk",
+"https://rsshub.app/twitter/user/AJABreaking",
+"https://rsshub.app/twitter/user/AlMayadeenNews",
+"https://rsshub.app/twitter/user/SkyNewsArabia_B",
+
+# مواقع عربية
+"https://www.aljazeera.net/aljazeera/rss",
+"https://www.alarabiya.net/.mrss/ar.xml",
+"https://www.skynewsarabia.com/web/rss",
+"https://arabic.rt.com/rss/",
+"https://www.alhurra.com/api/zmg/rss"
 ]
 
 posted = set()
 
 
+def download_video(url):
+
+    ydl_opts = {
+        "format": "mp4",
+        "quiet": True
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+
+        video_url = info["url"]
+
+        r = requests.get(video_url)
+
+        return BytesIO(r.content)
+
+
 def get_image(entry):
-    if hasattr(entry, 'media_content'):
-        return entry.media_content[0]['url']
-    if hasattr(entry, 'enclosures') and len(entry.enclosures) > 0:
-        return entry.enclosures[0]['href']
+
+    if "media_content" in entry:
+        return entry.media_content[0]["url"]
+
+    if "enclosures" in entry and len(entry.enclosures) > 0:
+        return entry.enclosures[0]["href"]
+
     return None
 
 
@@ -32,39 +62,53 @@ async def main():
 
     while True:
 
-        for rss_url in feeds:
+        for url in feeds:
 
-            feed = feedparser.parse(rss_url)
+            feed = feedparser.parse(url)
 
             for entry in feed.entries:
 
                 if entry.link not in posted:
 
-                    text = f"{entry.title}\n{entry.link}"
+                    title = entry.title
+                    text = entry.summary if "summary" in entry else ""
 
-                    image_url = get_image(entry)
+                    message = f"{title}\n\n{text}\n\n{entry.link}"
+
+                    media = get_image(entry)
 
                     try:
 
-                        if image_url:
-                            response = requests.get(image_url)
-                            image_bytes = BytesIO(response.content)
+                        # فيديو تويتر
+                        if "twitter.com" in entry.link or "x.com" in entry.link:
+
+                            video = download_video(entry.link)
+
+                            await bot.send_video(
+                                chat_id=CHANNEL,
+                                video=video,
+                                caption=message[:1000]
+                            )
+
+                        elif media:
+
+                            img = requests.get(media)
 
                             await bot.send_photo(
                                 chat_id=CHANNEL,
-                                photo=image_bytes,
-                                caption=text
+                                photo=BytesIO(img.content),
+                                caption=message[:1000]
                             )
 
                         else:
 
                             await bot.send_message(
                                 chat_id=CHANNEL,
-                                text=text
+                                text=message[:4000]
                             )
 
                     except Exception as e:
-                        print("Send error:", e)
+                        print(e)
 
                     posted.add(entry.link)
 
